@@ -1,9 +1,8 @@
-package main
+package srv
 
 import (
 	"encoding/json"
-	"log"
-	"os"
+	"sync"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -64,23 +63,8 @@ type notification struct {
 	timer      *time.Timer
 }
 
-func (n notification) close(reason closeReason) {
-	notifications.mutex.Lock()
-	defer notifications.mutex.Unlock()
-
-	if n.timer != nil {
-		n.timer.Stop()
-	}
-
-	if n.Image != "" {
-		os.Remove(n.Image)
-	}
-
-	delete(notifications.notifications, n.Id)
-	output()
-
-	err := conn.Emit(DBUS_OBJECT, DBUS_NAME+".NotificationClosed", n.Id, reason)
-	if err != nil {
-		log.Print(err)
-	}
+type notificationStack = struct {
+	mutex         *sync.Mutex
+	notifications map[uint32]notification
+	nextId        uint32
 }

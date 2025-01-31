@@ -1,19 +1,25 @@
-package main
+package srv
 
 import (
+	"encoding/json"
+	"fmt"
 	"image"
 	"image/png"
 	"log"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/godbus/dbus/v5"
 )
 
-type server struct{}
+type notifServer struct {
+	notifications *notificationStack
+	server
+}
 
-func (s server) GetCapabilities() (capabilities []string, e *dbus.Error) {
+func (s notifServer) GetCapabilities() (capabilities []string, e *dbus.Error) {
 	// log.Print("GetCapabilities called")
 	return []string{
 		"body",
@@ -21,29 +27,25 @@ func (s server) GetCapabilities() (capabilities []string, e *dbus.Error) {
 	}, nil
 }
 
-func (s server) GetServerInformation() (name, vendor, version, specVersion string, e *dbus.Error) {
+func (s notifServer) GetServerInformation() (name, vendor, version, specVersion string, e *dbus.Error) {
 	// log.Print("GetServerInformation called")
 	return "corvid", "CartConnoisseur", "0.1.0", "1.2", nil
 }
 
-func (s server) CloseNotification(id uint32) (e *dbus.Error) {
+func (s notifServer) CloseNotification(id uint32) (e *dbus.Error) {
 	// log.Printf("CloseNotification called: %d", id)
-	notification, ok := notifications.notifications[id]
-	if ok {
-		notification.close(CloseReasonClosed)
-	}
-
+	s.close(id, CloseReasonClosed)
 	return nil
 }
 
-func (s server) Notify(appName string, replacesId uint32, appIcon string, summary string, body string, actions []string, hints map[string]dbus.Variant, expireTimeout int32) (id uint32, e *dbus.Error) {
+func (s notifServer) Notify(appName string, replacesId uint32, appIcon string, summary string, body string, actions []string, hints map[string]dbus.Variant, expireTimeout int32) (id uint32, e *dbus.Error) {
 	// log.Print("Notify called")
-	notifications.mutex.Lock()
-	defer notifications.mutex.Unlock()
+	s.notifications.mutex.Lock()
+	defer s.notifications.mutex.Unlock()
 
 	if replacesId == 0 {
-		id = notifications.nextId
-		notifications.nextId++
+		id = s.notifications.nextId
+		s.notifications.nextId++
 	} else {
 		id = replacesId
 	}
@@ -122,12 +124,72 @@ func (s server) Notify(appName string, replacesId uint32, appIcon string, summar
 
 	if expireTimeout != 0 {
 		notification.timer = time.AfterFunc(time.Duration(expireTimeout)*time.Millisecond, func() {
-			notification.close(CloseReasonExpire)
+			s.close(notification.Id, CloseReasonExpire)
 		})
 	}
 
-	notifications.notifications[id] = notification
-	output()
+	s.notifications.notifications[id] = notification
+	s.output()
 
 	return id, nil
+}
+
+func (s notifServer) close(id uint32, reason closeReason) {
+	s.notifications.mutex.Lock()
+	defer s.notifications.mutex.Unlock()
+
+	n, ok := s.notifications.notifications[id]
+	if !ok {
+		return
+	}
+
+	if n.timer != nil {
+		n.timer.Stop()
+	}
+
+	if n.Image != "" {
+		os.Remove(n.Image)
+	}
+
+	delete(s.notifications.notifications, n.Id)
+	s.output()
+
+	err := s.conn.Emit(s.object, s.name+".NotificationClosed", n.Id, reason)
+	if err != nil {
+		log.Print(err)
+	}
+}
+
+// TODO: relocate to cmd/corvid
+func (s notifServer) output() {
+	arr := make([]notification, len(s.notifications.notifications))
+
+	i := 0
+	for _, notification := range s.notifications.notifications {
+		arr[i] = notification
+		i++
+	}
+
+	slices.SortFunc(arr, func(a, b notification) int {
+		if a.Timestamp > b.Timestamp {
+			return SORT_DIRECTION
+		} else if a.Timestamp < b.Timestamp {
+			return -SORT_DIRECTION
+		} else {
+			if a.Id > b.Id {
+				return SORT_DIRECTION
+			} else if a.Id < b.Id {
+				return -SORT_DIRECTION
+			}
+		}
+
+		return 0
+	})
+
+	j, err := json.Marshal(arr)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	fmt.Println(string(j))
 }
