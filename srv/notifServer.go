@@ -1,23 +1,17 @@
 package srv
 
 import (
-	"encoding/json"
-	"fmt"
 	"image"
 	"image/png"
 	"log"
 	"os"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/godbus/dbus/v5"
 )
 
-type notifServer struct {
-	notifications *notificationStack
-	server
-}
+type notifServer server
 
 func (s notifServer) GetCapabilities() (capabilities []string, e *dbus.Error) {
 	// log.Print("GetCapabilities called")
@@ -34,7 +28,8 @@ func (s notifServer) GetServerInformation() (name, vendor, version, specVersion 
 
 func (s notifServer) CloseNotification(id uint32) (e *dbus.Error) {
 	// log.Printf("CloseNotification called: %d", id)
-	s.close(id, CloseReasonClosed)
+	server(s).close(id, CloseReasonClosed)
+	server(s).output()
 	return nil
 }
 
@@ -124,72 +119,13 @@ func (s notifServer) Notify(appName string, replacesId uint32, appIcon string, s
 
 	if expireTimeout != 0 {
 		notification.timer = time.AfterFunc(time.Duration(expireTimeout)*time.Millisecond, func() {
-			s.close(notification.Id, CloseReasonExpire)
+			server(s).close(notification.Id, CloseReasonExpire)
+			server(s).output()
 		})
 	}
 
 	s.notifications.notifications[id] = notification
-	s.output()
+	server(s).output()
 
 	return id, nil
-}
-
-func (s notifServer) close(id uint32, reason closeReason) {
-	s.notifications.mutex.Lock()
-	defer s.notifications.mutex.Unlock()
-
-	n, ok := s.notifications.notifications[id]
-	if !ok {
-		return
-	}
-
-	if n.timer != nil {
-		n.timer.Stop()
-	}
-
-	if n.Image != "" {
-		os.Remove(n.Image)
-	}
-
-	delete(s.notifications.notifications, n.Id)
-	s.output()
-
-	err := s.conn.Emit(s.object, s.name+".NotificationClosed", n.Id, reason)
-	if err != nil {
-		log.Print(err)
-	}
-}
-
-// TODO: relocate to cmd/corvid
-func (s notifServer) output() {
-	arr := make([]notification, len(s.notifications.notifications))
-
-	i := 0
-	for _, notification := range s.notifications.notifications {
-		arr[i] = notification
-		i++
-	}
-
-	slices.SortFunc(arr, func(a, b notification) int {
-		if a.Timestamp > b.Timestamp {
-			return SORT_DIRECTION
-		} else if a.Timestamp < b.Timestamp {
-			return -SORT_DIRECTION
-		} else {
-			if a.Id > b.Id {
-				return SORT_DIRECTION
-			} else if a.Id < b.Id {
-				return -SORT_DIRECTION
-			}
-		}
-
-		return 0
-	})
-
-	j, err := json.Marshal(arr)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	fmt.Println(string(j))
 }
