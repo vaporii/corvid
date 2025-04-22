@@ -100,7 +100,7 @@ func (s notifServer) Notify(appName string, replacesId uint32, appIcon string, s
 	}
 
 	if expireTimeout == -1 {
-		expireTimeout = DEFAULT_EXPIRATION
+		expireTimeout = int32(DEFAULT_EXPIRATION)
 	}
 
 	notification := notification{

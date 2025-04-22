@@ -11,8 +11,8 @@ import (
 	"github.com/godbus/dbus/v5"
 )
 
-const DEFAULT_EXPIRATION = 5000
-const SORT_DIRECTION = 1 // 1 = newest first, -1 = oldest first
+var DEFAULT_EXPIRATION int
+var SORT_DIRECTION int // 1 = newest first, -1 = oldest first
 
 type server struct {
 	notifications *notificationStack
@@ -80,11 +80,14 @@ func (s server) output() {
 	fmt.Println(string(j))
 }
 
-func Start() {
+func Start(defaultExpiration int, sortDirection int) {
 	const NOTIF_DBUS_OBJECT = "/org/freedesktop/Notifications"
 	const NOTIF_DBUS_NAME = "org.freedesktop.Notifications"
 	const CORVID_DBUS_OBJECT = "/sh/cxl/Corvid"
 	const CORVID_DBUS_NAME = "sh.cxl.Corvid"
+
+	DEFAULT_EXPIRATION = defaultExpiration
+	SORT_DIRECTION = sortDirection
 
 	notifications := notificationStack{
 		mutex:         &sync.Mutex{},

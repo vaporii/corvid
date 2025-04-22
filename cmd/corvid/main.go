@@ -39,8 +39,33 @@ func main() {
 }
 
 func server() {
-	srv.Start()
+	defaultExpiration := getEnvInt("CORVID_DEFAULT_EXPIRATION", 5000)
+	sortDirection := 1
+
+	switch os.Getenv("CORVID_SORT_DIRECTION") {
+	case "NEWEST_FIRST":
+		sortDirection = 1
+	case "OLDEST_FIRST":
+		sortDirection = -1
+	}
+
+	srv.Start(defaultExpiration, sortDirection)
 	select {}
+}
+
+func getEnvInt(key string, fallback int) int {
+	str := os.Getenv(key)
+
+	if len(str) == 0 {
+		return fallback
+	}
+
+	value, err := strconv.Atoi(str)
+	if err != nil {
+		return fallback
+	}
+
+	return value
 }
 
 func call(name string, args ...interface{}) error {
