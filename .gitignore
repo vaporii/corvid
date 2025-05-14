@@ -1,3 +1,10 @@
-/eww/*
+# build results
 /corvid
 /result
+
+# eww test widgets
+/eww/*
+
+# direnv
+.envrc
+.direnv
