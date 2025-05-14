@@ -32,8 +32,21 @@ func main() {
 		call("Dismiss", uint32(id))
 	case "dismiss-all":
 		call("DismissAll")
+	case "help":
+		fmt.Printf("subcommands:\n")
+		fmt.Printf("  server (default) - run the server\n")
+		fmt.Printf("  dismiss <id>     - dismiss specific notification\n")
+		fmt.Printf("  dismiss-all      - dismiss all notifications\n")
+		fmt.Printf("\n")
+		fmt.Printf("environment vars:\n")
+		fmt.Printf("  CORVID_DEFAULT_EXPIRATION - default notification expiration in\n")
+		fmt.Printf("                              ms. -1 = never (default: 5000)\n")
+		fmt.Printf("  CORVID_SORT_DIRECTION     - notification sort direction, either\n")
+		fmt.Printf("                              NEWEST_FIRST or OLDEST_FIRST\n")
+		fmt.Printf("                              (default: NEWEST_FIRST)\n")
 	default:
 		fmt.Printf("unknown subcommand: %s\n", os.Args[1])
+		fmt.Printf("run corvid help for command list\n")
 		os.Exit(1)
 	}
 }
